@@ -16,7 +16,14 @@ import json, os, shutil, subprocess, html, sys, importlib
 HERE = os.path.dirname(os.path.abspath(__file__))
 VIDEO, WORDS, BEATS, BRAND = sys.argv[1:5]
 HF = os.path.abspath(sys.argv[5]) if len(sys.argv) > 5 else f'{HERE}/hf-{BRAND}'
-B = json.load(open(f'{HERE}/brands.json'))[BRAND]
+_ALL = json.load(open(f'{HERE}/brands.json'))
+if os.path.exists(f'{HERE}/my-brands.json'): _ALL.update(json.load(open(f'{HERE}/my-brands.json')))   # yours, from brand.py
+if BRAND == 'default': BRAND = _ALL.get('_default', 'classic')   # the brand saved by brand.py
+B = _ALL[BRAND]
+# LAYOUT=low (default): cards below the face. LAYOUT=high: face sits low in the frame, so cards go above the
+# head and captions under the chin. lookaway.py tells you which one your video needs.
+LAYOUT = os.environ.get('LAYOUT', 'low')
+IMAGES = []   # real logos / screenshots used by cover(), copied into the project
 CTA_LEN = 4.2
 
 def probe(f):
@@ -140,6 +147,23 @@ def big_number(id, a, b, lines, t_lines, number, t_number, caption):
     T(f'tl.from("#{id}_t", {{opacity:0, y:20, duration:0.3, ease:"power3.out"}}, {t_number+0.38:.2f});')
     T(f'tl.to("#{id}_bg", {{opacity:0, duration:0.15}}, {b-0.17:.2f});')
 
+def cover(id, a, b, lines, times, image=None, t_image=None, payoff=None, t_payoff=None):
+    """Full-screen cutaway on your brand background. Use it to show the REAL thing you name (a logo, an app,
+    a screenshot: image='path/to/file.png') and to cover any moment you look away from the camera.
+    lines/times: short phrases that pop in as you say them; payoff: one big accent word at t_payoff."""
+    img = ''
+    if image:
+        IMAGES.append(os.path.abspath(os.path.expanduser(image)))
+        img = f'<div class="shot" id="{id}_i"><img src="assets/img/{esc(os.path.basename(image))}" /></div>'
+    chips = ''.join(f'<div class="chip big" id="{id}_c{k}">{esc(x)}</div>' for k, x in enumerate(lines))
+    pay = f'<div class="bigc" id="{id}_p">{esc(payoff)}</div>' if payoff else ''
+    clip(id, a, b, f'<div class="canvas" id="{id}_bg"><div class="cov">{img}{chips}{pay}</div></div>', 30)
+    T(f'tl.to("#{id}_bg", {{opacity:1, duration:0.15}}, {a:.2f});')
+    if image: T(f'tl.from("#{id}_i", {{opacity:0, y:50, scale:0.9, duration:0.4, ease:"back.out(1.5)"}}, {(t_image or a + 0.05):.2f});')
+    for k, t in enumerate(times): pop(f'#{id}_c{k}', t)
+    if payoff: T(f'tl.from("#{id}_p", {{opacity:0, y:24, rotationX:-70, duration:0.45, ease:"back.out(1.7)"}}, {t_payoff:.2f});')
+    T(f'tl.to("#{id}_bg", {{opacity:0, duration:0.15}}, {b-0.17:.2f});')
+
 def chat(id, a, b, them, t_them, me, t_me, who='Client'):
     """Two chat bubbles: their question, your answer."""
     clip(id, a, b, f'<div class="chat mid"><div class="msg sm" id="{id}_1"><div class="who">{esc(who)}</div><div class="txt">{esc(them)}</div></div><div class="msg sm me" id="{id}_2"><div class="txt">{esc(me)}</div></div></div>')
@@ -192,6 +216,7 @@ for gi, g in enumerate(groups):
         T(f'tl.to("#cw{gi}_{j}", {{color:"var(--bg)", duration:0.08}}, {t:.2f});')
 
 def rgb(h): h = h.lstrip('#'); return ','.join(str(int(h[i:i + 2], 16)) for i in (0, 2, 4))
+HIGH_CSS = '.mid { top:345px; } .list { top:345px; } .msg { top:345px; } .capin { top:1400px; }' if LAYOUT == 'high' else ''
 P = B['palette']
 F = B.get('fonts', {})
 HEAD, SERIF = F.get('head', 'Montserrat'), F.get('accent', 'Cormorant')
@@ -276,6 +301,10 @@ html, body {{ width:1080px; height:1920px; overflow:hidden; background:#000; fon
 .cap {{ text-align:center; }}
 .capin {{ position:absolute; top:1252px; left:0; right:0; margin:0 auto; width:max-content; max-width:960px; background:rgba(var(--primary-rgb),.92); border-radius:22px; padding:10px 28px 14px; font-weight:800; font-size:54px; line-height:1.2; }}
 .cw {{ color:rgba(var(--bg-rgb),.45); }}
+.cov {{ position:absolute; top:330px; left:0; right:0; text-align:center; }}
+.shot {{ width:880px; margin:0 auto 46px; background:#fff; border-radius:30px; overflow:hidden; box-shadow:0 24px 60px rgba(var(--primary-rgb),.25); }}
+.shot img {{ display:block; width:100%; max-height:760px; object-fit:contain; background:#fff; }}
+{HIGH_CSS}
 {B.get('extra_css', '')}
 </style>
 </head>
@@ -299,6 +328,7 @@ if not os.path.isdir(HF):
     shutil.copytree(f'{HERE}/template', HF)
 os.makedirs(f'{HF}/assets/img', exist_ok=True)
 shutil.copy(os.path.join(HERE, B['logo']), f'{HF}/assets/img/')
+for im in IMAGES: shutil.copy(im, f'{HF}/assets/img/')
 bm = f'{HF}/assets/base.mp4'
 # the speaker's clip, silent, frozen on its last frame under the end card (finish.sh adds the voice back)
 if not os.path.exists(bm) or os.path.getmtime(bm) < os.path.getmtime(VIDEO):

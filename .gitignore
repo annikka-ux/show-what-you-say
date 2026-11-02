@@ -11,3 +11,6 @@ synced/*.aiff
 remix/hf-*/
 remix/demo*
 remix/*.plan.json
+music/
+synced/img/*-logo.png
+synced/my-brands.json

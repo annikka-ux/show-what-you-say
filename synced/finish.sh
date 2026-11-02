@@ -1,8 +1,11 @@
 #!/bin/zsh
-# finish.sh HF_DIR VIDEO OUT.mp4 [MUSIC.mp3] : render the HyperFrames project, then lay the speaker's voice
+# finish.sh HF_DIR VIDEO OUT.mp4 [MUSIC.mp3|none] : render the HyperFrames project, then lay the speaker's voice
 # back on (-14 LUFS, the social-media loudness), a quiet music bed (6%), and the house fade in/out + cover.
 set -e
 HF=${1:A}; VID=${2:A}; OUT=${3:A}; MUS=${4:+${4:A}}
+# no music given: use the free bed setup.sh downloaded (music/default.mp3); pass "none" for no music
+[ -z "$MUS" ] && [ -s ${0:A:h:h}/music/default.mp3 ] && MUS=${0:A:h:h}/music/default.mp3
+[ "${4:-}" = "none" ] && MUS=
 cd ${0:A:h}
 (cd $HF && npx --yes hyperframes@0.8.210 render -o $HF/render.mp4 >/dev/null 2>$HF/render.err) || { print "render failed, see $HF/render.err"; exit 1; }
 T=$(ffprobe -v error -show_entries format=duration -of csv=p=0 $HF/render.mp4)

@@ -38,7 +38,11 @@ BRANDS = os.path.abspath(opt('--brands', f'{KIT}/synced/brands.json'))
 if len(args) < 3: raise SystemExit(__doc__)
 PLAN, BRAND, SUBJECTS = args[0], args[1], [os.path.abspath(s) for s in args[2:]]
 HF = os.path.abspath(OUTDIR or f'{HERE}/hf-remix-{BRAND}')
-B = json.load(open(BRANDS))[BRAND]
+_ALL = json.load(open(BRANDS))
+_MINE = os.path.join(os.path.dirname(BRANDS), 'my-brands.json')   # your brand, saved by synced/brand.py
+if os.path.exists(_MINE): _ALL.update(json.load(open(_MINE)))
+if BRAND == 'default': BRAND = _ALL.get('_default', 'classic')
+B = _ALL[BRAND]
 LOGO = os.path.join(os.path.dirname(BRANDS), B['logo'])
 P, F = B['palette'], B.get('fonts', {})
 HEAD, SERIF = F.get('head', 'Montserrat'), F.get('accent', 'Cormorant')
