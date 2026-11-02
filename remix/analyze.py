@@ -3,23 +3,32 @@ Finds every cut, the tempo and beats of its music, the camera move inside each s
 pan, tilt, handheld, still) and how each shot arrives (hard cut, white flash, dip to black, whip).
 Only the timing and structure are kept: no frame, sound or person from the reference ends up in your video.
 
-usage: python3 analyze.py REFERENCE.mp4 [PLAN.json] [--threshold 0.30]
-  REFERENCE.mp4  any edit you want to copy the rhythm of (a reel you saved, your own past video)
+usage: python3 analyze.py REFERENCE.mp4 [PLAN.json] [--from S] [--to S] [--threshold N]
+  REFERENCE.mp4  any edit you want to copy the rhythm of (a reel you saved, your own past video).
+                 A music file works too: you get its tempo and beats (remix.py --music uses this).
   PLAN.json      default <reference>.plan.json next to it
-  --threshold    cut sensitivity, 0.2 (finds more cuts) to 0.5 (only hard changes); default 0.30
+  --from, --to   use only this stretch of the reference, in seconds (a 90 s reel -> --from 0 --to 15)
+  --threshold    a fixed cut sensitivity instead of the automatic one, 0.1 (finds more cuts) to 0.5 (only
+                 hard changes). Leave it off: the automatic mode also finds jump cuts inside one setting.
 
 Uses only ffmpeg and Python's standard library. If numpy is installed, camera moves are measured
 frame by frame; without it each shot is still timed exactly but its move is guessed from its energy."""
-import json, math, os, re, subprocess, sys
+import json, math, os, re, subprocess, sys, tempfile
 from array import array
 
 args = [a for a in sys.argv[1:]]
-TH = 0.30
-if '--threshold' in args:
-    i = args.index('--threshold'); TH = float(args[i + 1]); del args[i:i + 2]
+def opt(name):
+    if name not in args: return None
+    i = args.index(name); v = float(args[i + 1]); del args[i:i + 2]; return v
+TH, T_FROM, T_TO = opt('--threshold'), opt('--from'), opt('--to')
 if not args: raise SystemExit(__doc__)
-REF = os.path.abspath(args[0])
-OUT = os.path.abspath(args[1]) if len(args) > 1 else os.path.splitext(REF)[0] + '.plan.json'
+SRC = os.path.abspath(args[0])
+OUT = os.path.abspath(args[1]) if len(args) > 1 else os.path.splitext(SRC)[0] + '.plan.json'
+REF = SRC
+if T_FROM is not None or T_TO is not None:      # analyze a trimmed copy; times in the plan start at 0
+    REF = os.path.join(tempfile.mkdtemp(), 'window.mp4')
+    subprocess.run(['ffmpeg', '-v', 'error', '-y', '-ss', str(T_FROM or 0), '-i', SRC] + (['-t', str(T_TO - (T_FROM or 0))] if T_TO else []) +
+                   ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '18', '-c:a', 'aac', REF], check=True)
 SW, SH, SFPS = 72, 128, 15      # tiny grayscale frames for measuring motion and brightness
 
 def run(cmd, **kw): return subprocess.run(cmd, capture_output=True, check=True, **kw)
@@ -27,14 +36,26 @@ def run(cmd, **kw): return subprocess.run(cmd, capture_output=True, check=True, 
 def probe():
     r = run(['ffprobe', '-v', 'error', '-show_entries', 'format=duration:stream=codec_type', '-of', 'json', REF], text=True)
     j = json.loads(r.stdout)
-    return float(j['format']['duration']), any(s.get('codec_type') == 'audio' for s in j.get('streams', []))
+    kinds = [s.get('codec_type') for s in j.get('streams', [])]
+    return float(j['format']['duration']), 'audio' in kinds, 'video' in kinds
 
-DUR, HAS_AUDIO = probe()
+DUR, HAS_AUDIO, HAS_VIDEO = probe()
 
 # ---- cuts: ffmpeg's scene score jumps when the picture changes all at once ----------------------
-r = subprocess.run(['ffmpeg', '-hide_banner', '-i', REF, '-an', '-vf', f"scale=270:-2,select='gt(scene,{TH})',showinfo", '-f', 'null', '-'],
-                   capture_output=True, text=True)
-cuts = sorted({round(float(m), 3) for m in re.findall(r'pts_time:([0-9.]+)', r.stderr)})
+# Automatic mode: a cut is a frame whose score stands out from the second around it, so a jump cut inside
+# one setting (score ~0.1) counts as much as a hard cut between two places (0.4+), and steady motion doesn't.
+r = subprocess.run(['ffmpeg', '-hide_banner', '-i', REF, '-an', '-vf', "scale=270:-2,select='gte(scene,0)',metadata=print:key=lavfi.scene_score:file=-",
+                    '-f', 'null', '-'], capture_output=True, text=True) if HAS_VIDEO else None
+sc = [] if r is None else [(float(t), float(v)) for t, v in re.findall(r'pts_time:([0-9.]+)\s+lavfi\.scene_score=([0-9.]+)', r.stdout)]
+cuts = []
+for i, (t, v) in enumerate(sc):
+    if TH is not None:
+        if v > TH: cuts.append(round(t, 3))
+        continue
+    near = [x for _, x in sc[max(0, i - 15):i] + sc[i + 1:i + 16]]
+    if not near or v < 0.06 or v < max(near): continue           # local peak only
+    base = sorted(near)[len(near) // 2]
+    if v > 0.3 or v > max(0.06, base * 5 + 0.02): cuts.append(round(t, 3))
 cuts = [c for c in cuts if 0.25 < c < DUR - 0.25]
 merged = []
 for c in cuts:                  # a flash or a fast whip can trigger twice in a row; keep the first
@@ -42,10 +63,10 @@ for c in cuts:                  # a flash or a fast whip can trigger twice in a 
 cuts = merged
 
 # ---- tiny frames: brightness for flashes and dips, motion for camera moves ------------------------
-raw = run(['ffmpeg', '-v', 'error', '-i', REF, '-an', '-vf', f'fps={SFPS},scale={SW}:{SH},format=gray', '-f', 'rawvideo', '-']).stdout
+raw = run(['ffmpeg', '-v', 'error', '-i', REF, '-an', '-vf', f'fps={SFPS},scale={SW}:{SH},format=gray', '-f', 'rawvideo', '-']).stdout if HAS_VIDEO else b''
 FS = SW * SH
 frames = [raw[i:i + FS] for i in range(0, len(raw) - FS + 1, FS)]
-luma = [sum(f) / FS for f in frames]
+luma = [sum(f) / FS for f in frames] or [128.0]
 def fidx(t): return max(0, min(len(frames) - 1, int(round(t * SFPS))))
 
 try:
@@ -157,7 +178,7 @@ for n, (a, b) in enumerate(zip(edges, edges[1:])):
     shots.append({'start': round(a, 3), 'end': round(b, 3), 'move': move, 'strength': round(strength, 2),
                   'energy': round(e, 3), 'arrive': arrive})
 
-plan = {'source': os.path.basename(REF), 'duration': round(DUR, 3), 'bpm': bpm, 'beats': beats, 'shots': shots,
+plan = {'source': os.path.basename(SRC), 'window': [T_FROM or 0, T_TO] if REF != SRC else None, 'duration': round(DUR, 3), 'bpm': bpm, 'beats': beats, 'shots': shots,
         'measured_moves': np is not None}
 json.dump(plan, open(OUT, 'w'), indent=1)
 avg = DUR / len(shots)

@@ -13,7 +13,11 @@ options:
   --payoff "Booked."   the end scene: shape morph into the brand colour, the word flips in letter by letter,
                        rings, sparkles and your last photo on a 3D card
   --lines "A|B|C"      short lines, one per shot after the hook, each landing on its shot's first beat
+  --music FILE         the track you will finish with: its beats drive the punches, and every cut within
+                       0.25 s of a beat snaps onto it (pass the same file to finish.sh)
   --no-cta             leave off the end card (on by default, from brands.json)
+  --brands FILE        your own brands file instead of ../synced/brands.json (keep it outside the kit;
+                       its logo path is relative to that file)
   --out DIR            default hf-remix-<BRAND>
 Then render with: ./finish.sh DIR OUT.mp4 [MUSIC.mp3 or the reference itself, if you have the rights]"""
 import html, json, os, shutil, subprocess, sys
@@ -29,11 +33,13 @@ def opt(name, default=None, flag=False):
 HOOK, LEAD, PAYOFF = opt('--hook'), opt('--lead'), opt('--payoff')
 LINES = [x.strip() for x in opt('--lines', '').split('|') if x.strip()]
 NO_CTA = opt('--no-cta', flag=True)
-OUTDIR = opt('--out')
+OUTDIR, MUSIC = opt('--out'), opt('--music')
+BRANDS = os.path.abspath(opt('--brands', f'{KIT}/synced/brands.json'))
 if len(args) < 3: raise SystemExit(__doc__)
 PLAN, BRAND, SUBJECTS = args[0], args[1], [os.path.abspath(s) for s in args[2:]]
 HF = os.path.abspath(OUTDIR or f'{HERE}/hf-remix-{BRAND}')
-B = json.load(open(f'{KIT}/synced/brands.json'))[BRAND]
+B = json.load(open(BRANDS))[BRAND]
+LOGO = os.path.join(os.path.dirname(BRANDS), B['logo'])
 P, F = B['palette'], B.get('fonts', {})
 HEAD, SERIF = F.get('head', 'Montserrat'), F.get('accent', 'Cormorant')
 ACC_STYLE = 'italic' if SERIF == 'Cormorant' else 'normal'
@@ -47,6 +53,21 @@ plan = json.load(open(plan_file))
 DUR = plan['duration']
 beats = plan.get('beats') or []
 shots = [dict(s) for s in plan['shots']]
+
+if MUSIC:     # your track sets the beat: punches follow it, and near-miss cuts snap onto it
+    mp = os.path.join(os.path.dirname(os.path.abspath(HF)), '.music.plan.json')
+    os.makedirs(os.path.dirname(mp), exist_ok=True)
+    subprocess.run([sys.executable, f'{HERE}/analyze.py', os.path.abspath(MUSIC), mp], check=True, capture_output=True)
+    m = json.load(open(mp)); os.remove(mp)
+    beats = [t for t in m['beats'] if t < DUR]
+    plan['bpm'] = m['bpm']
+    snapped = 0
+    for i in range(1, len(shots)):
+        c = shots[i]['start']
+        near = min(beats, key=lambda t: abs(t - c), default=c)
+        if 0 < abs(near - c) <= 0.25 and shots[i - 1]['start'] + 0.3 < near < shots[i]['end'] - 0.3:
+            shots[i - 1]['end'] = shots[i]['start'] = round(near, 3); snapped += 1
+    print(f'music: {m["bpm"]} BPM, {snapped} of {len(shots) - 1} cuts snapped to its beats')
 
 # the payoff scene needs room: fold the last shots into one end scene of at least END_MIN seconds
 end_scene = None
@@ -69,7 +90,7 @@ if not os.path.isdir(HF): shutil.copytree(f'{KIT}/synced/template', HF)
 A = f'{HF}/assets/img'; os.makedirs(A, exist_ok=True)
 for f in os.listdir(A):
     if f.startswith(('sub', 'shot')): os.remove(f'{A}/{f}')
-shutil.copy(os.path.join(KIT, 'synced', B['logo']), A)
+shutil.copy(LOGO, A)
 subs = []
 for i, s in enumerate(SUBJECTS):
     if not os.path.exists(s): raise SystemExit(f'not found: {s}')
@@ -83,7 +104,43 @@ for i, s in enumerate(SUBJECTS):
     cut = ext == '.png' and ('a' in pix.replace('yuv', ''))       # rgba, ya8, pal8 with alpha...
     dst = f'{A}/sub{i}.{"png" if cut else "jpg"}'
     run(['ffmpeg', '-v', 'error', '-y', '-i', src, '-vf', "scale='min(1600,iw)':-2", '-frames:v', '1'] + ([] if cut else ['-q:v', '3']) + [dst])
-    subs.append({'kind': 'cutout' if cut else 'photo', 'src': os.path.basename(dst)})
+    subs.append({'kind': 'cutout' if cut else 'photo', 'src': os.path.basename(dst), 'name': os.path.basename(s)})
+
+# faces: the Mac's own Vision framework finds them (faces.swift), so a 9:16 crop keeps the face in frame,
+# pushes zoom toward it and words stay off it. No swift (no Xcode tools)? Photos are centred instead.
+FACE = {}
+photos = [x for x in subs if x['kind'] == 'photo']
+if photos and shutil.which('swift'):
+    r = subprocess.run(['swift', f'{HERE}/faces.swift'] + [f'{A}/{x["src"]}' for x in photos], capture_output=True, text=True)
+    for line, x in zip(r.stdout.splitlines(), photos):
+        j = json.loads(line)
+        if not j['faces']: continue
+        f = max(j['faces'], key=lambda b: b[2] * b[3])
+        FACE[x['src']] = (f, j['w'], j['h'])
+        if f[0] < 0.01 or f[1] < 0.01 or f[0] + f[2] > 0.99 or f[1] + f[3] > 0.99:
+            print(f'warning: {x["name"]}: the face touches the edge of the photo, so it will look cut off. Pick another photo.')
+elif photos:
+    print('(swift not found: photos are centred, not framed on faces. xcode-select --install adds it, free.)')
+
+def framing(sub):
+    """Where the face lands once the photo fills 1080x1920: object-position, zoom origin, face top/bottom."""
+    if sub['kind'] == 'cutout': return {'y0': 520, 'y1': 1290}
+    if sub['src'] not in FACE: return None
+    (fx, fy, fw, fh), iw, ih = FACE[sub['src']]
+    sc = max(1080 / iw, 1920 / ih); sw, sh = iw * sc, ih * sc
+    cx, cy = (fx + fw / 2) * sw, (fy + fh / 2) * sh
+    px = min(1, max(0, (cx - 540) / (sw - 1080))) if sw > 1081 else 0.5
+    py = min(1, max(0, (cy - 860) / (sh - 1920))) if sh > 1921 else 0.5      # face a little above the middle
+    ox, oy = (sw - 1080) * px, (sh - 1920) * py
+    cx, cy, y0, y1 = cx - ox, cy - oy, fy * sh - oy, (fy + fh) * sh - oy
+    z = 1.26                                                                    # the biggest a move zooms in
+    return {'pos': f'{px * 100:.1f}% {py * 100:.1f}%', 'cx': cx, 'cy': cy, 'y0': cy + (y0 - cy) * z - 50, 'y1': cy + (y1 - cy) * z + 50}
+
+SLOTS = {'top': (230, 470), 'mid': (740, 1000), 'low': (1290, 1440)}
+def slot(bands, prefs):
+    """First text slot in prefs that stays clear of every face band; else the one that overlaps least."""
+    def hit(p): return sum(max(0, min(SLOTS[p][1], b['y1']) - max(SLOTS[p][0], b['y0'])) for b in bands if b)
+    return next((p for p in prefs if hit(p) == 0), min(prefs, key=hit))
 
 # ---- timeline pieces ----------------------------------------------------------------------------
 els, tw = [], []
@@ -115,6 +172,9 @@ for n, s in enumerate(shots):
     sub = subs[n % len(subs)]
     if len(subs) > 1 and n and subs[(n - 1) % len(subs)] is sub: sub = subs[(n + 1) % len(subs)]
     wid, cam, pun = f'w{n}', f'c{n}', f'p{n}'
+    fr = framing(sub); s['band'] = fr
+    pos = f' style="object-position:{fr["pos"]}"' if fr and 'pos' in fr else ''
+    origin = f' style="transform-origin:{fr["cx"]:.0f}px {fr["cy"]:.0f}px"' if fr and 'cx' in fr else ''
     if sub['kind'] == 'video':          # each shot takes the next stretch of the clip, looping
         st = sub['used'] if sub['used'] + d < sub['len'] else 0.0
         sub['used'] = st + d
@@ -124,8 +184,8 @@ for n, s in enumerate(shots):
   <div class="sring"></div><div class="sring r2"></div><div class="sp" style="left:150px;top:520px">{spark}</div><div class="sp sm2" style="left:860px;top:1180px">{spark}</div>
   <img class="cutimg" src="assets/img/{sub["src"]}" /></div>'''
     else:
-        media = f'<img id="i{n}" class="clip sub" src="assets/img/{sub["src"]}" data-start="{a:.2f}" data-duration="{d_show:.2f}" data-track-index="{1 + n % 2}" />'
-    els.append(f'<div class="layer" id="{wid}" style="z-index:{1 + n % 2}"><div class="layer cam" id="{cam}"><div class="layer" id="{pun}">{media}</div></div></div>')
+        media = f'<img id="i{n}" class="clip sub"{pos} src="assets/img/{sub["src"]}" data-start="{a:.2f}" data-duration="{d_show:.2f}" data-track-index="{1 + n % 2}" />'
+    els.append(f'<div class="layer" id="{wid}" style="z-index:{1 + n % 2}"><div class="layer cam" id="{cam}"{origin}><div class="layer" id="{pun}">{media}</div></div></div>')
     k = 0.5 + 0.5 * s.get('strength', 0.5)
     mv = s.get('move', 'still')
     f0, f1 = MOVES.get(mv, MOVES['still'])
@@ -162,7 +222,9 @@ if HOOK:
     h_end = max(h_end, min(2.2, DUR))
     b2 = next((t for t in beats if t > 0.45), 0.7)
     size = max(96, min(190, int(1650 / max(4, len(HOOK)))))
-    els.append(f'<div id="hkh" class="clip" data-start="0" data-duration="{h_end:.2f}" data-track-index="20" style="z-index:20"><div class="scrim"></div><div class="hook" id="hk" style="font-size:{size}px">'
+    hs = slot([x.get('band') for x in shots if x['start'] < h_end], ('mid', 'top', 'low'))
+    top = {'top': 250, 'mid': 760, 'low': 1280}[hs]
+    els.append(f'<div id="hkh" class="clip" data-start="0" data-duration="{h_end:.2f}" data-track-index="20" style="z-index:20"><div class="scrim" style="top:{top - 200}px"></div><div class="hook" id="hk" style="font-size:{size}px; top:{top}px">'
                + ''.join(f'<span class="w">{esc(w)}</span> ' for w in HOOK.split()) + '<div class="hstrike" id="hks"></div></div></div>')
     T('tl.fromTo("#hk .w", {y:0}, {y:-8, duration:0.8, ease:"sine.inOut", stagger:0.1}, 0);')
     T(f'tl.fromTo("#hks", {{scaleX:0}}, {{scaleX:1, duration:0.4, ease:"power3.out"}}, {b2:.2f});')
@@ -174,7 +236,8 @@ for i, line in enumerate(LINES):
     a, b = shots[n]['start'], shots[n]['end']
     t = next((x for x in beats if a - 0.02 <= x < b - 0.3), a)
     lid = f'ln{i}'
-    els.append(f'<div id="{lid}h" class="clip" data-start="{a:.2f}" data-duration="{b - a:.2f}" data-track-index="21" style="z-index:21"><div class="line" id="{lid}">'
+    top = {'low': 1300, 'top': 250, 'mid': 820}[slot([shots[n].get('band')], ('low', 'top', 'mid'))]
+    els.append(f'<div id="{lid}h" class="clip" data-start="{a:.2f}" data-duration="{b - a:.2f}" data-track-index="21" style="z-index:21"><div class="line" id="{lid}" style="top:{top}px">'
                + ''.join(f'<span class="w">{esc(w)}</span> ' for w in line.split()) + '</div></div>')
     T(f'tl.from("#{lid}", {{opacity:0, scale:0.8, duration:0.2, ease:"back.out(1.8)"}}, {t:.2f});')
     T(f'tl.from("#{lid} .w", {{opacity:0, y:34, duration:0.24, stagger:0.06, ease:"power4.out"}}, {t + 0.04:.2f});')
@@ -221,7 +284,7 @@ if not NO_CTA:
   <div class="ring" id="r1"></div><div class="ring r2" id="r2"></div>
   <div class="sp" id="sp1" style="left:150px;top:380px">{spark}</div><div class="sp sm2" id="sp2" style="left:860px;top:520px">{spark}</div>
   <div class="sp sm2" id="sp3" style="left:190px;top:1150px">{spark}</div>
-  <div class="persp"><div class="lcard" id="lc"><img src="assets/img/{os.path.basename(B['logo'])}" /></div></div>
+  <div class="persp"><div class="lcard" id="lc"><img src="assets/img/{os.path.basename(LOGO)}" /></div></div>
   <div class="ctx"><div class="eye" id="ce">{esc(C['eyebrow'])}</div><div class="ttl" id="ct">{esc(C['title'])}</div>
     <div class="det" id="cd">{esc(C['detail'])}</div><div class="url" id="cu">{esc(C['url'])} →</div>
     <div class="fc" id="cf">{esc(C.get('footnote', 'Link in the first comment'))}</div></div></div></div>''')

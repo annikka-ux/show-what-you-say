@@ -75,6 +75,8 @@ Try the demo (it makes its own test reference and test photos, nothing downloade
 cd ~/show-what-you-say/remix && ./make_demo.sh && python3 analyze.py demo-ref.mp4 && python3 remix.py demo-ref.plan.json classic demo-photos/*.jpg demo-photos/product.png --hook "Busy." --lead "Now you're" --payoff "Booked." --lines "Answer first|Pause|End down" && ./finish.sh hf-remix-classic demo-remix.mp4 demo-ref.mp4
 ```
 
+Using your own music? Add `--music track.mp3` to `remix.py`: the punches follow your track's beat and the cuts snap onto it. A long reference? `analyze.py ... --from 0 --to 15` uses just that stretch. On a Mac with Swift (free: `xcode-select --install`), Apple's built-in face detection keeps every face in frame and moves the words off it.
+
 Good to know: it moves your real photos and clips to someone else's rhythm; it does not generate AI footage of you. Only use the reference's own sound if you have the rights to it (your own video, a licensed track). Camera moves are measured when Python has numpy (`pip3 install numpy`); without it the cuts, beats and transitions are still exact and the moves are guessed.
 
 ## Make it your brand
