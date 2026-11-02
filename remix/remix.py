@@ -100,7 +100,7 @@ for i, s in enumerate(SUBJECTS):
     if not os.path.exists(s): raise SystemExit(f'not found: {s}')
     ext = os.path.splitext(s)[1].lower()
     if ext in VIDEO_EXT:
-        subs.append({'kind': 'video', 'src': s, 'len': float(probe_json(s, 'format=duration')['format']['duration']), 'used': 0.0}); continue
+        subs.append({'kind': 'video', 'src': s, 'name': os.path.basename(s), 'len': float(probe_json(s, 'format=duration')['format']['duration']), 'used': 0.0}); continue
     src = s
     if ext in ('.heic', '.heif'):          # iPhone photos: macOS converts them for free
         src = f'{A}/sub{i}-in.jpg'; run(['sips', '-s', 'format', 'jpeg', s, '--out', src])
@@ -113,15 +113,23 @@ for i, s in enumerate(SUBJECTS):
 # faces: the Mac's own Vision framework finds them (faces.swift), so a 9:16 crop keeps the face in frame,
 # pushes zoom toward it and words stay off it. No swift (no Xcode tools)? Photos are centred instead.
 FACE = {}
-photos = [x for x in subs if x['kind'] == 'photo']
+photos = [x for x in subs if x['kind'] in ('photo', 'video')]
 if photos and shutil.which('swift'):
-    r = subprocess.run(['swift', f'{HERE}/faces.swift'] + [f'{A}/{x["src"]}' for x in photos], capture_output=True, text=True)
-    for line, x in zip(r.stdout.splitlines(), photos):
+    looks = []
+    for i, x in enumerate(photos):     # a clip is judged by its middle frame
+        if x['kind'] == 'video':
+            fr = f'{A}/look{i}.jpg'
+            run(['ffmpeg', '-v', 'error', '-y', '-ss', f'{x["len"] / 2:.2f}', '-i', x['src'], '-frames:v', '1', '-q:v', '3', fr])
+            looks.append(fr)
+        else: looks.append(f'{A}/{x["src"]}')
+    r = subprocess.run(['swift', f'{HERE}/faces.swift'] + looks, capture_output=True, text=True)
+    for line, x, lk in zip(r.stdout.splitlines(), photos, looks):
+        if x['kind'] == 'video': os.remove(lk)
         j = json.loads(line)
         if not j['faces']: continue
         f = max(j['faces'], key=lambda b: b[2] * b[3])
         FACE[x['src']] = (f, j['w'], j['h'])
-        if f[0] < 0.01 or f[1] < 0.01 or f[0] + f[2] > 0.99 or f[1] + f[3] > 0.99:
+        if x['kind'] == 'photo' and (f[0] < 0.01 or f[1] < 0.01 or f[0] + f[2] > 0.99 or f[1] + f[3] > 0.99):
             print(f'warning: {x["name"]}: the face touches the edge of the photo, so it will look cut off. Pick another photo.')
 elif photos:
     print('(swift not found: photos are centred, not framed on faces. xcode-select --install adds it, free.)')
@@ -182,7 +190,7 @@ for n, s in enumerate(shots):
     if sub['kind'] == 'video':          # each shot takes the next stretch of the clip, looping
         st = sub['used'] if sub['used'] + d < sub['len'] else 0.0
         sub['used'] = st + d
-        media = f'<video id="v{n}" class="clip sub" src="{esc(sub["src"])}" muted playsinline data-start="{a:.2f}" data-duration="{d_show:.2f}" data-media-start="{st:.2f}" data-track-index="{1 + n % 2}"></video>'
+        media = f'<video id="v{n}" class="clip sub"{pos} src="{esc(sub["src"])}" muted playsinline data-start="{a:.2f}" data-duration="{d_show:.2f}" data-media-start="{st:.2f}" data-track-index="{1 + n % 2}"></video>'
     elif sub['kind'] == 'cutout':
         media = f'''<div id="st{n}" class="clip stage" data-start="{a:.2f}" data-duration="{d_show:.2f}" data-track-index="{1 + n % 2}">
   <div class="sring"></div><div class="sring r2"></div><div class="sp" style="left:150px;top:520px">{spark}</div><div class="sp sm2" style="left:860px;top:1180px">{spark}</div>
