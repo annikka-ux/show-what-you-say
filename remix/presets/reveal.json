@@ -1,0 +1,98 @@
+{
+ "preset": "reveal",
+ "note": "Product or offer reveal: 112 BPM, quick teaser cuts, then a long last shot made for --payoff.",
+ "duration": 8.571,
+ "bpm": 112,
+ "beats": [
+  0.0,
+  0.536,
+  1.071,
+  1.607,
+  2.143,
+  2.679,
+  3.214,
+  3.75,
+  4.286,
+  4.821,
+  5.357,
+  5.893,
+  6.429,
+  6.964,
+  7.5,
+  8.036
+ ],
+ "shots": [
+  {
+   "start": 0.0,
+   "end": 0.536,
+   "move": "push_in",
+   "strength": 0.8,
+   "energy": 0.08,
+   "arrive": "cut"
+  },
+  {
+   "start": 0.536,
+   "end": 1.071,
+   "move": "orbit",
+   "strength": 0.8,
+   "energy": 0.08,
+   "arrive": "zoom"
+  },
+  {
+   "start": 1.071,
+   "end": 1.607,
+   "move": "pull_out",
+   "strength": 0.8,
+   "energy": 0.08,
+   "arrive": "cut"
+  },
+  {
+   "start": 1.607,
+   "end": 2.143,
+   "move": "push_in",
+   "strength": 0.8,
+   "energy": 0.08,
+   "arrive": "zoom"
+  },
+  {
+   "start": 2.143,
+   "end": 2.679,
+   "move": "pan_left",
+   "strength": 0.8,
+   "energy": 0.08,
+   "arrive": "cut"
+  },
+  {
+   "start": 2.679,
+   "end": 3.214,
+   "move": "orbit",
+   "strength": 0.8,
+   "energy": 0.08,
+   "arrive": "flash"
+  },
+  {
+   "start": 3.214,
+   "end": 4.286,
+   "move": "push_in",
+   "strength": 0.8,
+   "energy": 0.08,
+   "arrive": "cut"
+  },
+  {
+   "start": 4.286,
+   "end": 5.357,
+   "move": "pull_out",
+   "strength": 0.8,
+   "energy": 0.08,
+   "arrive": "zoom"
+  },
+  {
+   "start": 5.357,
+   "end": 8.571,
+   "move": "still",
+   "strength": 0.8,
+   "energy": 0.08,
+   "arrive": "morph"
+  }
+ ]
+}

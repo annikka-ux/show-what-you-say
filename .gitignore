@@ -8,3 +8,6 @@ synced/demo-words.json
 synced/*.wav
 synced/*.aiff
 *.err
+remix/hf-*/
+remix/demo*
+remix/*.plan.json

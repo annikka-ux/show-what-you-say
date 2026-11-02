@@ -1,0 +1,100 @@
+{
+ "preset": "story",
+ "note": "Day-in-the-life: 100 BPM, a shot every 3 beats, side-to-side whips. Works with clips as well as photos.",
+ "duration": 15.0,
+ "bpm": 100,
+ "beats": [
+  0.0,
+  0.6,
+  1.2,
+  1.8,
+  2.4,
+  3.0,
+  3.6,
+  4.2,
+  4.8,
+  5.4,
+  6.0,
+  6.6,
+  7.2,
+  7.8,
+  8.4,
+  9.0,
+  9.6,
+  10.2,
+  10.8,
+  11.4,
+  12.0,
+  12.6,
+  13.2,
+  13.8,
+  14.4,
+  15.0
+ ],
+ "shots": [
+  {
+   "start": 0.0,
+   "end": 1.8,
+   "move": "pan_left",
+   "strength": 0.7,
+   "energy": 0.05,
+   "arrive": "cut"
+  },
+  {
+   "start": 1.8,
+   "end": 3.6,
+   "move": "push_in",
+   "strength": 0.7,
+   "energy": 0.05,
+   "arrive": "whip"
+  },
+  {
+   "start": 3.6,
+   "end": 5.4,
+   "move": "pan_right",
+   "strength": 0.7,
+   "energy": 0.05,
+   "arrive": "cut"
+  },
+  {
+   "start": 5.4,
+   "end": 7.2,
+   "move": "pull_out",
+   "strength": 0.7,
+   "energy": 0.05,
+   "arrive": "whip"
+  },
+  {
+   "start": 7.2,
+   "end": 9.0,
+   "move": "tilt_down",
+   "strength": 0.7,
+   "energy": 0.05,
+   "arrive": "cut"
+  },
+  {
+   "start": 9.0,
+   "end": 10.8,
+   "move": "orbit",
+   "strength": 0.7,
+   "energy": 0.05,
+   "arrive": "whip"
+  },
+  {
+   "start": 10.8,
+   "end": 12.6,
+   "move": "push_in",
+   "strength": 0.7,
+   "energy": 0.05,
+   "arrive": "cut"
+  },
+  {
+   "start": 12.6,
+   "end": 15.0,
+   "move": "still",
+   "strength": 0.7,
+   "energy": 0.05,
+   "arrive": "whip"
+  }
+ ]
+}

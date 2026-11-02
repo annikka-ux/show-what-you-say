@@ -1,0 +1,147 @@
+{
+ "preset": "hype",
+ "note": "Fast and loud: 128 BPM, cuts on every beat in the build, white flashes, whips. Music with a strong kick.",
+ "duration": 11.25,
+ "bpm": 128,
+ "beats": [
+  0.0,
+  0.469,
+  0.938,
+  1.406,
+  1.875,
+  2.344,
+  2.812,
+  3.281,
+  3.75,
+  4.219,
+  4.688,
+  5.156,
+  5.625,
+  6.094,
+  6.562,
+  7.031,
+  7.5,
+  7.969,
+  8.438,
+  8.906,
+  9.375,
+  9.844,
+  10.312,
+  10.781,
+  11.25
+ ],
+ "shots": [
+  {
+   "start": 0.0,
+   "end": 0.938,
+   "move": "push_in",
+   "strength": 0.9,
+   "energy": 0.12,
+   "arrive": "cut"
+  },
+  {
+   "start": 0.938,
+   "end": 1.875,
+   "move": "pan_left",
+   "strength": 0.9,
+   "energy": 0.12,
+   "arrive": "flash"
+  },
+  {
+   "start": 1.875,
+   "end": 2.812,
+   "move": "orbit",
+   "strength": 0.9,
+   "energy": 0.12,
+   "arrive": "cut"
+  },
+  {
+   "start": 2.812,
+   "end": 3.75,
+   "move": "pull_out",
+   "strength": 0.9,
+   "energy": 0.12,
+   "arrive": "whip"
+  },
+  {
+   "start": 3.75,
+   "end": 4.219,
+   "move": "handheld",
+   "strength": 0.9,
+   "energy": 0.12,
+   "arrive": "cut"
+  },
+  {
+   "start": 4.219,
+   "end": 4.688,
+   "move": "push_in",
+   "strength": 0.9,
+   "energy": 0.12,
+   "arrive": "cut"
+  },
+  {
+   "start": 4.688,
+   "end": 5.156,
+   "move": "pan_right",
+   "strength": 0.9,
+   "energy": 0.12,
+   "arrive": "flash"
+  },
+  {
+   "start": 5.156,
+   "end": 5.625,
+   "move": "orbit",
+   "strength": 0.9,
+   "energy": 0.12,
+   "arrive": "zoom"
+  },
+  {
+   "start": 5.625,
+   "end": 6.562,
+   "move": "push_in",
+   "strength": 0.9,
+   "energy": 0.12,
+   "arrive": "cut"
+  },
+  {
+   "start": 6.562,
+   "end": 7.5,
+   "move": "pan_left",
+   "strength": 0.9,
+   "energy": 0.12,
+   "arrive": "flash"
+  },
+  {
+   "start": 7.5,
+   "end": 8.438,
+   "move": "orbit",
+   "strength": 0.9,
+   "energy": 0.12,
+   "arrive": "cut"
+  },
+  {
+   "start": 8.438,
+   "end": 8.906,
+   "move": "pull_out",
+   "strength": 0.9,
+   "energy": 0.12,
+   "arrive": "whip"
+  },
+  {
+   "start": 8.906,
+   "end": 9.375,
+   "move": "handheld",
+   "strength": 0.9,
+   "energy": 0.12,
+   "arrive": "cut"
+  },
+  {
+   "start": 9.375,
+   "end": 11.25,
+   "move": "push_in",
+   "strength": 0.9,
+   "energy": 0.12,
+   "arrive": "cut"
+  }
+ ]
+}
